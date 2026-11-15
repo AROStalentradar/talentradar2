@@ -17,35 +17,168 @@ from core import (STATUSES, build_rows, demo_engine, get_engine, get_statuses, p
                   set_status)
 from exports import prompt_text, write_excel
 
-st.set_page_config(page_title="Talentradar", page_icon="📡", layout="wide")
+import base64
+from pathlib import Path
 
-GREEN, INK, PANEL, MUTED = "#36D399", "#0F1720", "#18232F", "#9FB0BF"
-STATUS_COLOR = {"Ny": "#9FB0BF", "Kontaktet": "#FFB020", "Møde": "#5AB0FF", "Kontrakt": GREEN,
-                "Afvist": "#E5707A", "Ikke relevant": "#6B7885"}
 
-st.markdown(f"""
+def _brand(name, default):
+    """Branding kan sættes i Secrets/miljø uden at ændre koden."""
+    v = os.environ.get(name)
+    if not v:
+        try:
+            v = st.secrets.get(name)
+        except Exception:
+            v = None
+    return v or default
+
+
+def _logo_uri():
+    """Læser assets/logo.(png|svg|jpg|webp) og indlejrer den i siden. Tom, hvis der ikke er en logofil."""
+    for ext, mime in (("svg", "image/svg+xml"), ("png", "image/png"), ("jpg", "image/jpeg"), ("webp", "image/webp")):
+        f = Path(__file__).parent / "assets" / f"logo.{ext}"
+        if f.exists():
+            return f"data:{mime};base64," + base64.b64encode(f.read_bytes()).decode()
+    return ""
+
+
+BRAND_NAME = _brand("BRAND_NAME", "AROS")
+ACCENT = _brand("BRAND_COLOR", "#FFFFFF")
+LOGO = _logo_uri()
+_icon = next((str(f) for f in (Path(__file__).parent / "assets").glob("icon.*")), None)
+st.set_page_config(page_title=f"Talentradar · {BRAND_NAME}", page_icon=_icon or "📡", layout="wide")
+
+GREEN, INK, PANEL, MUTED = "#FFFFFF", "#000000", "#0A0A0A", "#8C8C8C"
+
+import hashlib
+import math
+
+st.markdown("""
 <style>
-#MainMenu, footer {{visibility: hidden;}}
-.block-container {{padding-top: 2rem; max-width: 1500px;}}
-.hero h1 {{font-size: 2.4rem; margin: 0; letter-spacing: -0.02em;}}
-.hero p {{color: {MUTED}; margin: .2rem 0 0 0;}}
-.kpi {{background: {PANEL}; border: 1px solid #243445; border-radius: 14px; padding: 18px 22px; height: 100%;}}
-.kpi .l {{font-size: .75rem; letter-spacing: .12em; color: {MUTED}; text-transform: uppercase;}}
-.kpi .v {{font-size: 2.1rem; font-weight: 700; color: {GREEN}; line-height: 1.2;}}
-.kpi .s {{color: #B7C4D0; font-size: .9rem;}}
-.pill {{display: inline-block; padding: 2px 12px; border-radius: 20px; font-size: .78rem; font-weight: 600;
-        border: 1px solid {GREEN}; color: {GREEN}; margin-right: 6px;}}
-.pill.warn {{border-color: #FFB020; color: #FFB020;}}
-.pill.mute {{border-color: #6B7885; color: #9FB0BF;}}
-.five {{background: {PANEL}; border: 1px solid #243445; border-radius: 16px; padding: 20px 22px; height: 100%;}}
-.five .rk {{font-size: 2.2rem; font-weight: 700; color: {GREEN}; line-height: 1;}}
-.five .nm {{font-size: 1.25rem; font-weight: 600; margin: 6px 0 2px 0;}}
-.five .nm a {{color: #E6EDF3; text-decoration: none;}}
-.five .st {{color: #B7C4D0; font-size: .95rem; margin: 8px 0;}}
-.five .tj {{color: {MUTED}; font-size: .82rem; margin-top: 10px; border-top: 1px solid #243445; padding-top: 8px;}}
-.demo {{background: #FFC7CE; color: #9C0006; padding: 8px 16px; border-radius: 10px; font-weight: 600; margin-bottom: 14px;}}
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@300;400;500;600&display=swap');
+:root { --line: rgba(255,255,255,.16); --glass: rgba(255,255,255,.04); --dim: #8C8C8C; --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif; }
+html, body, .stApp, [class*="css"] { font-family: "Hanken Grotesk", "Helvetica Neue", Arial, sans-serif; color: #fff; }
+.stApp { background: #000; }
+#MainMenu, footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+.block-container { padding-top: 1.6rem; max-width: 1320px; }
+section[data-testid="stSidebar"] { background: #050505; border-right: 1px solid var(--line); }
+section[data-testid="stSidebar"] h3 { font-family: var(--serif); font-weight: 400; font-size: 1.5rem; }
+h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.01em; }
+h4 { font-size: 1.7rem; }
+
+/* Topbjælke */
+.mast { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.mast .brand { display: flex; align-items: center; gap: 16px; }
+.mast img { height: 52px; width: auto; display: block; }
+.wordmark { font-weight: 600; font-size: 1.15rem; letter-spacing: .34em; }
+.mast .prod { font-family: var(--serif); font-style: italic; font-size: 1.35rem; padding-left: 16px; border-left: 1px solid var(--line); }
+.mast .upd { color: var(--dim); font-size: .85rem; font-variant-numeric: tabular-nums; }
+
+/* Hero: sætning + radar */
+.hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 470px); gap: 48px; align-items: center; margin: 30px 0 34px; }
+.lede { font-family: var(--serif); font-weight: 400; font-size: clamp(2.2rem, 4.2vw, 4rem); line-height: 1.04; letter-spacing: -0.02em; margin: 0 0 18px; }
+.lede em { font-style: italic; border-bottom: 1px solid #fff; }
+.lede-sub { color: var(--dim); font-size: 1.02rem; line-height: 1.65; max-width: 34em; font-weight: 300; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+
+/* Radar */
+.rdr { position: relative; width: 100%; aspect-ratio: 1 / 1; border: 1px solid var(--line); border-radius: 28px; padding: 7%;
+       background: var(--glass); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+       box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+.rdr .disc { position: relative; width: 100%; height: 100%; }
+.rdr svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.rdr .sweep { position: absolute; inset: 0; border-radius: 50%; animation: spin 7s linear infinite;
+              background: conic-gradient(from 0deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,0) 255deg, rgba(255,255,255,.07) 300deg, rgba(255,255,255,.34) 356deg, rgba(255,255,255,.95) 360deg);
+              -webkit-mask: radial-gradient(circle, #000 0 69.5%, transparent 70%); mask: radial-gradient(circle, #000 0 69.5%, transparent 70%);
+              filter: drop-shadow(0 0 10px rgba(255,255,255,.55)); }
+.rdr .corner { position: absolute; font-size: .68rem; color: var(--dim); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.rdr .tl { top: 3.2%; left: 5%; } .rdr .tr { top: 3.2%; right: 5%; } .rdr .bl { bottom: 3.2%; left: 5%; }
+.rdr .blip { fill: #fff; } .rdr .blip.big { filter: drop-shadow(0 0 1.6px #fff); }
+.rdr .ping { fill: none; stroke: #fff; stroke-width: .35; transform-box: fill-box; transform-origin: center; animation: ping 3.2s ease-out infinite; }
+.rdr .lab { fill: #fff; font-size: 2.5px; font-family: "Hanken Grotesk", Arial, sans-serif; letter-spacing: .02em; }
+.rdr .grid { fill: none; stroke: rgba(255,255,255,.26); stroke-width: .22; }
+.rdr .tick { stroke: rgba(255,255,255,.4); stroke-width: .2; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes ping { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(4.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rdr .sweep, .rdr .ping { animation: none; } }
+
+/* Rangliste */
+.bench { border-top: 1px solid #fff; }
+.row { display: grid; grid-template-columns: 70px minmax(170px, 1.1fr) 3fr minmax(150px, .9fr); align-items: center; gap: 18px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.row .rk { font-family: var(--serif); font-style: italic; font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.row .nm { font-family: var(--serif); font-size: 1.55rem; line-height: 1.1; }
+.row .nm a { color: #fff; text-decoration: none; } .row .nm a:hover { text-decoration: underline; text-underline-offset: 5px; }
+.row .meta { color: var(--dim); font-size: .85rem; }
+.row .barwrap { display: flex; align-items: center; gap: 14px; }
+.row .bar { height: 1px; background: #fff; position: relative; min-width: 6px; }
+.row .bar::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px #fff; }
+.row .gv { font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: 6px; }
+.row .chk { font-size: .78rem; color: var(--dim); margin-top: 4px; }
+@media (max-width: 900px) { .row { grid-template-columns: 48px 1fr; } .row .barwrap, .row .chk { grid-column: 2; } }
+
+/* Tags og poster */
+.pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: .74rem; border: 1px solid rgba(255,255,255,.55); color: #fff; margin-right: 6px; }
+.pill.warn { border-style: dashed; } .pill.mute { color: var(--dim); border-color: var(--line); }
+.pill.s-Ny { color: var(--dim); border-color: var(--line); }
+.pill.s-Møde { background: rgba(255,255,255,.16); }
+.pill.s-Kontrakt { background: #fff; color: #000; border-color: #fff; font-weight: 600; }
+.pill.s-Afvist { text-decoration: line-through; color: var(--dim); }
+.pill.s-Ikke { color: #5a5a5a; border-color: #2a2a2a; }
+.five { border: 1px solid var(--line); background: var(--glass); border-radius: 18px; padding: 14px 16px; margin-bottom: 10px;
+        -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.five .rk { font-family: var(--serif); font-style: italic; font-size: 1.6rem; line-height: 1; }
+.five .nm { font-family: var(--serif); font-size: 1.3rem; margin: 2px 0; } .five .nm a { color: #fff; text-decoration: none; }
+.five .st { color: var(--dim); font-size: .88rem; margin: 6px 0; }
+.five .tj { color: var(--dim); font-size: .78rem; border-top: 1px solid var(--line); padding-top: 6px; }
+.demo { border: 1px dashed rgba(255,255,255,.5); color: #fff; padding: 8px 14px; font-size: .85rem; margin-bottom: 14px; border-radius: 999px; text-align: center; }
+
+/* Streamlit-komponenter */
+div[data-baseweb="tab-list"] { gap: 26px; border-bottom: 1px solid var(--line); }
+button[data-baseweb="tab"] { background: transparent; padding: 10px 0; font-family: var(--serif); font-size: 1.25rem; }
+div[data-baseweb="tab-highlight"] { background-color: #fff; height: 1px; }
+div[data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+div[data-testid="stMetric"] { background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+.stButton > button, .stDownloadButton > button { border-radius: 999px; border: 1px solid rgba(255,255,255,.6); background: transparent; color: #fff; font-weight: 500; }
+.stButton > button[kind="primary"] { background: #fff; color: #000; border-color: #fff; }
+.footer { margin-top: 48px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: .78rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 </style>
 """, unsafe_allow_html=True)
+
+
+def radar_html(rows, updated=""):
+    """Radar: hver prik er en kandidat. Tættere på midten = vokser hurtigere. Retningen er kun til at sprede prikkerne."""
+    pool = [r for r in rows if not r["flag"]][:24] or rows[:24]
+    mx = max([r["score"] for r in pool] + [1])
+    svg = ['<svg viewBox="0 0 100 100" aria-hidden="true">']
+    for rad in (48, 36, 24, 12):
+        svg.append(f'<circle class="grid" cx="50" cy="50" r="{rad}"/>')
+    svg.append('<line class="grid" x1="2" y1="50" x2="98" y2="50"/><line class="grid" x1="50" y1="2" x2="50" y2="98"/>')
+    for d in range(0, 360, 10):
+        c, sn = math.cos(math.radians(d)), math.sin(math.radians(d))
+        ln = 2.2 if d % 30 == 0 else 1.1
+        svg.append(f'<line class="tick" x1="{50 + 48 * c:.2f}" y1="{50 + 48 * sn:.2f}" x2="{50 + (48 + ln) * c:.2f}" y2="{50 + (48 + ln) * sn:.2f}"/>')
+    placed = []
+    for i, r in enumerate(pool):
+        h = int(hashlib.md5(r["login"].encode()).hexdigest()[:8], 16)
+        ang = (h % 3600) / 3600 * 2 * math.pi
+        rad = 8 + 36 * (1 - r["score"] / mx) ** 0.8
+        x, y = 50 + rad * math.cos(ang), 50 + rad * math.sin(ang)
+        big = i < 3
+        delay = (h % 60) / 10
+        svg.append(f'<circle class="ping" cx="{x:.2f}" cy="{y:.2f}" r="{1.2 if big else .8}" style="animation-delay:-{delay:.1f}s"/>')
+        svg.append(f'<circle class="blip{" big" if big else ""}" cx="{x:.2f}" cy="{y:.2f}" r="{1.2 if big else .75}"/>')
+        if i < 5:
+            left = x > 62
+            ly = y + .9
+            for px, py in placed:  # undgå at labels ligger oven i hinanden
+                if abs(ly - py) < 3.4 and abs(x - px) < 28:
+                    ly = py + 3.6
+            placed.append((x, ly))
+            svg.append(f'<text class="lab" x="{x + (-2.2 if left else 2.2):.2f}" y="{ly:.2f}" text-anchor="{"end" if left else "start"}">{html.escape(r["name"])}</text>')
+    svg.append('</svg>')
+    return (f'<div class="rdr"><div class="disc">{"".join(svg)}<div class="sweep"></div></div>'
+            f'<span class="corner tl">{len(pool)} kandidater</span><span class="corner tr">{html.escape(updated)}</span>'
+            f'<span class="corner bl">tættere på midten = hurtigere vækst</span></div>')
 
 
 # ---------------------------------------------------------------- Data
@@ -95,8 +228,7 @@ def current_user():
 
 
 def status_pill(s):
-    c = STATUS_COLOR.get(s, MUTED)
-    return f'<span class="pill" style="border-color:{c};color:{c}">{html.escape(s)}</span>'
+    return f'<span class="pill s-{html.escape(s.split()[0])}">{html.escape(s)}</span>'
 
 
 # ---------------------------------------------------------------- Sidebar
@@ -123,6 +255,18 @@ view = [r for r in rows
         and (not pick_status or r["status"] in pick_status)
         and (not search or search.lower() in r["name"].lower() or search.lower() in r["login"].lower())]
 
+_upd_short = ""
+if last_ts:
+    try:
+        _upd_short = datetime.fromisoformat(last_ts).astimezone().strftime("%d.%m kl. %H:%M")
+    except Exception:
+        _upd_short = ""
+if st.query_params.get("overlay"):
+    st.markdown("""<style>section[data-testid="stSidebar"], header, .mast {display:none !important}
+    .block-container {max-width: 560px; padding-top: 1rem;} .stApp {background:#000}</style>""", unsafe_allow_html=True)
+    st.markdown(radar_html(rows, _upd_short), unsafe_allow_html=True)
+    st.stop()
+
 # ---------------------------------------------------------------- Header
 if DEMO:
     st.markdown('<div class="demo">DEMODATA – opdigtede kanaler til visning af værktøjet</div>', unsafe_allow_html=True)
@@ -132,8 +276,10 @@ if last_ts:
         updated = datetime.fromisoformat(last_ts).astimezone().strftime("%d-%m-%Y kl. %H:%M")
     except Exception:
         updated = last_ts
-st.markdown(f'<div class="hero"><h1>📡 Talentradar</h1><p>Danske Twitch-streamere i hurtigst vækst · '
-            f'Seneste hentning: {html.escape(updated)}</p></div>', unsafe_allow_html=True)
+_mark = (f'<img src="{LOGO}" alt="{html.escape(BRAND_NAME)}">' if LOGO
+         else f'<div class="wordmark">{html.escape(BRAND_NAME)}</div>')
+st.markdown(f'<div class="mast"><div class="brand">{_mark}<div class="prod">Talentradar</div></div>'
+            f'<div class="upd">Opdateret {html.escape(updated)}</div></div>', unsafe_allow_html=True)
 st.write("")
 
 if not rows:
@@ -144,18 +290,21 @@ if not rows:
 counts, avg_days = pipeline_stats(EN)
 free = [r for r in rows if not r["flag"]]
 top = rows[0]
-k = st.columns(4)
-tiles = [
-    ("Kandidater på listen", str(len(rows)), f"{len(free)} uden bureau/mail i bio"),
-    ("Hurtigst voksende", html.escape(top["name"]),
-     f"{top['g30']:+,} følgere/30 d".replace(",", ".") if top["g30"] is not None else f"{top['g7']:+,} følgere/7 d".replace(",", ".")),
-    ("Kontakter · møder · kontrakter", f"{counts['Kontaktet']} · {counts['Møde']} · {counts['Kontrakt']}", "seneste 90 dage"),
-    ("Tid til kontrakt", f"{avg_days:.0f} dage" if avg_days is not None else "–", "fra første kontakt, gennemsnit"),
-]
-for col, (l, v, s) in zip(k, tiles):
-    col.markdown(f'<div class="kpi"><div class="l">{l}</div><div class="v">{v}</div><div class="s">{s}</div></div>',
-                 unsafe_allow_html=True)
-st.write("")
+def _g(r):
+    if r["g30"] is not None:
+        return f"{r['g30']:+,} følgere på 30 dage".replace(",", ".")
+    return f"{r['g7']:+,} følgere på 7 dage".replace(",", ".")
+
+
+n_free = len(free)
+_sub = [f"{len(rows)} kandidater er på listen, og {n_free} af dem har hverken bureau eller mail i bioen."]
+if counts["Kontaktet"] or counts["Møde"] or counts["Kontrakt"]:
+    _sub.append(f"De seneste 90 dage er {counts['Kontaktet']} kontaktet, {counts['Møde']} til møde og "
+                f"{counts['Kontrakt']} endt med kontrakt"
+                + (f", i gennemsnit {avg_days:.0f} dage efter første kontakt." if avg_days is not None else "."))
+st.markdown(f'<div class="hero"><div><h1 class="lede"><em>{html.escape(top["name"])}</em> vokser hurtigst lige nu, '
+            f'med {_g(top)}.</h1><div class="lede-sub">{" ".join(_sub)}</div></div>{radar_html(rows, _upd_short)}</div>',
+            unsafe_allow_html=True)
 
 tab_radar, tab_five, tab_pipe, tab_ex, tab_about = st.tabs(["Radar", "Ugens fem", "Pipeline", "Fravalgt", "Om"])
 
@@ -216,7 +365,7 @@ with tab_radar:
                 m[2].metric("Vækst 30 d", f"{r['g30']:+,}".replace(",", ".") if r["g30"] is not None else "–")
                 hist = pd.DataFrame({"Følgere": [t for _, t in r["history"]]},
                                     index=pd.to_datetime([d for d, _ in r["history"]]))
-                st.area_chart(hist, color=GREEN, height=220)
+                st.area_chart(hist, color="#FFFFFF", height=220)
                 with st.expander("Bio"):
                     st.write(r["bio"] or "Ingen bio.")
                 st.caption("Tjek manuelt før kontakt: alder (18+) og forhold til spilreklame.")
@@ -236,17 +385,22 @@ with tab_five:
     st.caption("De fem højeste scorer uden bureau-flag og uden status Afvist/Ikke relevant. "
                "Claude kan skrive begrundelsen ud fra prompten nederst.")
     cand = [r for r in rows if not r["flag"] and r["status"] not in ("Afvist", "Ikke relevant")][:5]
-    cols = st.columns(5)
-    for col, r in zip(cols, cand):
-        g = f"{r['g30']:+,}".replace(",", ".") + " / 30 d" if r["g30"] is not None else f"{r['g7']:+,}".replace(",", ".") + " / 7 d"
-        col.markdown(
-            f'<div class="five"><div class="rk">#{rows.index(r) + 1}</div>'
-            f'<div class="nm"><a href="https://www.twitch.tv/{html.escape(r["login"])}" target="_blank">{html.escape(r["name"])}</a></div>'
-            f'{status_pill(r["status"])}'
-            f'<div class="st">{r["followers"]:,} følgere<br><b style="color:{GREEN}">{g}</b><br>'
-            f'{r["viewers"]:.0f} gns. seere<br>{html.escape(r["category"] or "")}</div>'
-            f'<div class="tj">Tjek: alder 18+, spilreklame, code of conduct</div></div>'.replace(",", "."),
-            unsafe_allow_html=True)
+    def _gv(r):
+        return r["g30"] if r["g30"] is not None else (r["g7"] or 0) * 30 / 7
+    mx = max([_gv(r) for r in cand] + [1])
+    out = []
+    for i, r in enumerate(cand):
+        g = f"{r['g30']:+,} / 30 d" if r["g30"] is not None else f"{r['g7']:+,} / 7 d"
+        out.append(
+            f'<div class="row"><div class="rk">{rows.index(r) + 1}</div>'
+            f'<div><div class="nm"><a href="https://www.twitch.tv/{html.escape(r["login"])}" target="_blank">{html.escape(r["name"])}</a></div>'
+            f'<div class="meta">{html.escape(r["category"] or "")}</div></div>'
+            f'<div class="barwrap"><div class="bar" style="width:{max(2, _gv(r) / mx * 70):.0f}%"></div>'
+            f'<div class="gv">{g.replace(",", ".")}</div></div>'
+            f'<div><div class="meta">{r["followers"]:,} følgere, {r["viewers"]:.0f} gns. seere</div>'.replace(",", ".") +
+            f'<div style="margin-top:4px">{status_pill(r["status"])}</div>'
+            f'<div class="chk">Tjek alder 18+, spilreklame og code of conduct</div></div></div>')
+    st.markdown('<div class="bench">' + "".join(out) + '</div>', unsafe_allow_html=True)
     st.write("")
     with st.expander("Prompt til Claude (kopiér og indsæt)"):
         st.code(prompt_text(rows, demo=DEMO), language="markdown")
@@ -298,3 +452,6 @@ with tab_about:
 3. Kemitjek over en kaffe. Radaren finder kandidater, mennesker vælger.
 """)
     st.caption(f"Logget ind som: {current_user()}")
+
+st.markdown(f'<div class="footer"><span>{html.escape(BRAND_NAME)} · Talentradar</span>'
+            f'<span>Data fra Twitchs officielle API · Kun til internt brug</span></div>', unsafe_allow_html=True)
