@@ -1,0 +1,3 @@
+Læg Aros' logo her som assets/logo.png (eller logo.svg). Gerne gennemsigtig baggrund og hvid/lys udgave, da dashboardet er mørkt.
+Valgfrit: assets/icon.png bruges som fanebladsikon.
+Brandfarve og navn sættes i Streamlit Secrets: BRAND_COLOR = "#RRGGBB" og BRAND_NAME = "AROS".
